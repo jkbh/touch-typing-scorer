@@ -1,22 +1,19 @@
-import sys
 import cv2
-import time
-from PySide6.QtCore import QThread, Signal, Qt, Slot
-from PySide6.QtGui import QImage, QPixmap, QAction
-from PySide6.QtWidgets import QApplication, QWidget, QVBoxLayout, QMainWindow, QLabel
+from PySide6.QtCore import QThread, Signal
+from PySide6.QtGui import QImage
+
 
 class CaptureThread(QThread):
     updateFrame = Signal(QImage)
 
     def __init__(self, parent=None):
         QThread.__init__(self, parent)
-        self.cap = True
-        self.status = True
+        self._status = True
 
     def run(self):
-        self.cap = cv2.VideoCapture(0)
+        cap = cv2.VideoCapture(0)
         while self.status:
-            ret, frame = self.cap.read()
+            ret, frame = cap.read()
             if not ret:
                 continue
 
@@ -24,15 +21,13 @@ class CaptureThread(QThread):
 
             color = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            height, width, channels = color.shape
-            
-            img = QImage(color.data, width, height, QImage.Format_RGB888)
-            
-            self.updateFrame.emit(img)
-        sys.exit(-1)
+            height, width, _ = color.shape
 
-if __name__ == "__main__":
-    app = QApplication()
-    w = Window()
-    w.show()
-    sys.exit(app.exec())
+            img = QImage(color.data, width, height, QImage.Format.Format_RGB888)
+
+            self.updateFrame.emit(img)
+        cap.release()
+
+    def quit(self) -> None:
+        self.status = False
+        return super().quit()
