@@ -1,33 +1,52 @@
 import cv2
 from PySide6.QtCore import QThread, Signal
 from PySide6.QtGui import QImage
+from mediapipe import Image, ImageFormat
+from mediapipe.tasks.python import BaseOptions
+from mediapipe.tasks.python.vision import HandLandmarker, HandLandmarkerOptions, HandLandmarkerResult, RunningMode
+
+from draw import draw_landmarks_on_image
 
 
 class CaptureThread(QThread):
+    updateLandmarks = Signal(HandLandmarkerResult)
     updateFrame = Signal(QImage)
 
     def __init__(self, parent=None):
         QThread.__init__(self, parent)
         self._status = True
+        self._model_path =  "./hand_landmarker.task"
+
 
     def run(self):
-        cap = cv2.VideoCapture(0)
-        while self.status:
-            ret, frame = cap.read()
-            if not ret:
-                continue
+        options = HandLandmarkerOptions(
+            base_options=BaseOptions(self._model_path),
+            running_mode=RunningMode.IMAGE,
+            num_hands=2
+        )
+        with HandLandmarker.create_from_options(options) as landmarker:
+            cap = cv2.VideoCapture(0)
+            while self._status:
+                ret, frame = cap.read()
+                if not ret:
+                    continue
 
-            # detect, draw ...
+                color = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
 
-            color = cv2.cvtColor(frame, cv2.COLOR_BGR2RGB)
+                mp_image = Image(image_format=ImageFormat.SRGB, data=color)
 
-            height, width, _ = color.shape
+                result = landmarker.detect(mp_image)
+                self.updateLandmarks.emit(result)
 
-            img = QImage(color.data, width, height, QImage.Format.Format_RGB888)
+                color_with_landmarks = draw_landmarks_on_image(color, result)
 
-            self.updateFrame.emit(img)
-        cap.release()
+                height, width, _ = color_with_landmarks.shape
+
+                img = QImage(color_with_landmarks.data, width, height, QImage.Format.Format_RGB888)
+
+                self.updateFrame.emit(img)
+            cap.release()
 
     def quit(self) -> None:
-        self.status = False
+        self._status = False
         return super().quit()
